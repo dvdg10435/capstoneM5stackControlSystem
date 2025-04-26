@@ -1,0 +1,688 @@
+import os, sys, io
+import M5
+from M5 import *
+from unit import DLightUnit, CO2Unit, PBHUBUnit, RGBUnit
+from hardware import I2C, Pin
+import time, ntptime, network, espnow, ujson
+
+title0 = None
+leftOne = None
+leftTwo = None
+leftThree = None
+leftFour = None
+leftFive = None
+middleTop = None
+middleMiddle = None
+leftBottom = None
+middleBottom = None
+rightBottom = None
+rightTop = None
+rightMiddle = None
+i2c0 = None
+dlight_0 = None
+pbhub_0 = None
+co2_0 = None
+fan_0 = None
+relay_0 = None
+rgb_0 = None
+co2Ready = None
+point = None
+
+def hideAllLabels():                                      # This function turns off all the labels. It is called in every view to reset the screen before adding the needed labels back on
+  global title0, leftOne, leftTwo, leftThree, leftFour, leftFive, middleTop, middleMiddle, leftBottom, middleBottom, rightBottom, rightTop, rightMiddle
+  leftOne.setVisible(False)
+  leftTwo.setVisible(False)
+  leftThree.setVisible(False)
+  leftFour.setVisible(False)
+  leftFive.setVisible(False)
+  leftBottom.setVisible(False)
+  middleTop.setVisible(False)
+  middleMiddle.setVisible(False)
+  middleBottom.setVisible(False)
+  rightTop.setVisible(False)
+  rightMiddle.setVisible(False)
+  rightBottom.setVisible(False)
+  leftOne.setFont(Widgets.FONTS.DejaVu18)
+  leftTwo.setFont(Widgets.FONTS.DejaVu18)
+  leftThree.setFont(Widgets.FONTS.DejaVu18)
+  leftFour.setFont(Widgets.FONTS.DejaVu18)
+  leftFive.setFont(Widgets.FONTS.DejaVu18)
+  M5.Lcd.clear(0x000000)
+#The following functions handle the views, or 'images', for the different screens that the user will interact with.
+def SetScreen():                                          # This function sets the screen according to the numbers
+  global title0, leftOne, leftTwo, leftThree, leftFour, leftFive, middleTop, middleMiddle, leftBottom, middleBottom, rightBottom, rightTop, rightMiddle
+  if screenNumber == 0:
+    hideAllLabels()
+    mainImage()
+  elif screenNumber == 1:
+    hideAllLabels()
+    yearImage()
+  elif screenNumber == 2:
+    hideAllLabels()
+    monthImage()
+  elif screenNumber == 3:
+    hideAllLabels()
+    dayImage()
+  elif screenNumber == 4:
+    hideAllLabels()
+    hourImage()
+  elif screenNumber == 5:
+    hideAllLabels()
+    minuteImage()
+  elif screenNumber == 6:
+    hideAllLabels()
+    nodeImage()
+  elif screenNumber == 7:
+    hideAllLabels()
+    moistureImage()
+  elif screenNumber == 8:
+    hideAllLabels()
+    phaseImage()
+  else:
+    hideAllLabels()
+    mainImage()
+def mainImage():                                          # This function sets the display for the main scree
+  global leftOne, leftTwo, leftThree, leftFour, leftFive, middleBottom
+  title0.setVisible(True)
+  title0.setText('Smart Greenhouse')
+  leftOne.setVisible(True)
+  leftTwo.setVisible(True)
+  leftThree.setVisible(True)
+  leftFour.setVisible(True)
+  leftFive.setVisible(True)
+  middleBottom.setVisible(True)
+  leftOne.setText(str('Date: ') + str((time.gmtime())[0]) + str('/') + str((time.gmtime())[1]) + str('/') + str((time.gmtime())[2]) + str('  Time: ') + str((time.gmtime())[3]) + str(':') + str((time.gmtime())[4]))
+  leftTwo.setText(str('Temp: ') + str(co2_0.is_data_ready()) + ' ' + str(tempMeas))
+  leftThree.setText(str('Amb Light: ') + str(luxMeas))
+  leftFour.setText(str('Heat Ctrl Sts: ') + str(tempCtrlStatus))
+  leftFive.setText(str('Moist Lvls: ') + str('0: ') + str(nodeMoistMeasPerc[-1]) + str(', 2:') + str(nodeMoistMeasPerc[0]) + str(', 3: ') + str(nodeMoistMeasPerc[1]) + \
+                  str('\n            4: ') + str(nodeMoistMeasPerc[2]) + str(', 5: ') + str(nodeMoistMeasPerc[4]))
+  middleBottom.setText(str('MENU'))
+def yearImage():                                          # This function sets the display to set the year
+  global middleTop, middleMiddle, rightTop, leftBottom, rightBottom, title0, year
+  title0.setVisible(True)
+  title0.setText('Set Date/Time')
+  middleTop.setVisible(True)
+  middleMiddle.setVisible(True)
+  rightTop.setVisible(True)
+  leftBottom.setVisible(True)
+  rightBottom.setVisible(True)
+  rightTop.setText('Next')
+  leftBottom.setText('Down')
+  rightBottom.setText('Up')
+  middleTop.setText('Year')
+  middleMiddle.setText(str(year))
+def monthImage():                                         # This function sets the display to set the month
+  global title0, middleTop, middleMiddle, rightTop, leftBottom, rightBottom, month
+  title0.setVisible(True)
+  title0.setText('Set Date/Time')
+  middleTop.setVisible(True)
+  middleMiddle.setVisible(True)
+  rightTop.setVisible(True)
+  leftBottom.setVisible(True)
+  rightBottom.setVisible(True)
+  rightTop.setText('Next')
+  leftBottom.setText('Down')
+  rightBottom.setText('Up')
+  middleTop.setText('Month')
+  middleMiddle.setText(str(month))
+def dayImage():                                           # This function sets the display to set the day
+  global title0, middleTop, middleMiddle, rightTop, leftBottom, rightBottom, day
+  title0.setVisible(True)
+  title0.setText('Set Date/Time')
+  middleTop.setVisible(True)
+  middleMiddle.setVisible(True)
+  rightTop.setVisible(True)
+  leftBottom.setVisible(True)
+  rightBottom.setVisible(True)
+  rightTop.setText('Next')
+  leftBottom.setText('Down')
+  rightBottom.setText('Up')
+  middleTop.setText('Day')
+  middleMiddle.setText(str(day))
+def hourImage():                                          # This function sets the display to set the hour
+  global title0, middleTop, middleMiddle, rightTop, leftBottom, rightBottom, hour
+  title0.setVisible(True)
+  title0.setText('Set Date/Time')
+  middleTop.setVisible(True)
+  middleMiddle.setVisible(True)
+  rightTop.setVisible(True)
+  leftBottom.setVisible(True)
+  rightBottom.setVisible(True)
+  rightTop.setText('Next')
+  leftBottom.setText('Down')
+  rightBottom.setText('Up')
+  middleTop.setText('Hour')
+  middleMiddle.setText(str(hour))  
+def minuteImage():                                        # This function sets the display to set the minute
+  global title0, middleTop, middleMiddle, rightTop, leftBottom, rightBottom, minute
+  title0.setVisible(True)
+  title0.setText('Set Date/Time')
+  middleTop.setVisible(True)
+  middleMiddle.setVisible(True)
+  rightTop.setVisible(True)
+  leftBottom.setVisible(True)
+  rightBottom.setVisible(True)
+  rightTop.setText('Next')
+  leftBottom.setText('Down')
+  rightBottom.setText('Up')
+  middleTop.setText('Minute')
+  middleMiddle.setText(str(minute))  
+def nodeImage():                                          # This function sets the display to set the node count
+  global title0, middleTop, middleMiddle, rightTop, leftBottom, rightBottom, nodeCount
+  title0.setVisible(True)
+  title0.setText('Set Node Count')
+  middleTop.setVisible(True)
+  middleMiddle.setVisible(True)
+  rightTop.setVisible(True)
+  leftBottom.setVisible(True)
+  rightBottom.setVisible(True)
+  rightTop.setText('Next')
+  leftBottom.setText('Down')
+  rightBottom.setText('Up')
+  middleTop.setText('Node Count')
+  middleMiddle.setText(str(nodeCount))  
+def moistureImage():                                      # This function sets the display to set the moisture for each node
+  global title0, middleTop, middleMiddle, rightTop, leftBottom, rightBottom, moistDsr
+  title0.setVisible(True)
+  title0.setText('Set Node Moisture')
+  middleTop.setVisible(True)
+  middleMiddle.setVisible(True)
+  rightTop.setVisible(True)
+  leftBottom.setVisible(True)
+  middleBottom.setVisible(True)
+  rightBottom.setVisible(True)
+  rightTop.setText('Next')
+  leftBottom.setText('Low')
+  middleBottom.setText('Med')
+  rightBottom.setText('High')
+  middleTop.setText(str('# ') + str(nodeNum))
+  middleMiddle.setText(str(nodeMoistDsr[nodeNum]))  
+def phaseImage():                                         # This function sets the display to set the phase desired
+  global title0, middleTop, middleMiddle, rightTop, leftBottom, rightBottom, phaseDsr
+  title0.setVisible(True)
+  title0.setText('Set Phase')
+  middleTop.setVisible(True)
+  middleMiddle.setVisible(True)
+  rightTop.setVisible(True)
+  leftBottom.setVisible(True)
+  middleBottom.setVisible(True)
+  rightBottom.setVisible(True)
+  rightTop.setText('Done')
+  leftBottom.setText('Germ')
+  middleBottom.setText('Vege')
+  rightBottom.setText('Fruit')
+  middleTop.setText('Phase')
+  middleMiddle.setText(str(phaseDsr))  
+# The following functions handle the touches for the menus on the system
+def menuButton():
+  global isPressed, screenNumber
+  # only fire on a fresh press inside that rectangle
+  if screenNumber == 0 and isPressed == 1 \
+    and 110 <= touchX <= 220 and 200 <= touchY <= 240:
+    Speaker.tone(1500, 50)
+    menuSetupComplete = False
+    print(str(touchX) + str(' ') + str(touchY))
+    screenNumber = 1
+    SetScreen()
+    isPressed = 0   # consume this tap
+def yearButton():
+  global isPressed, screenNumber, year
+  if screenNumber == 1 and isPressed == 1:
+    if 240 <= touchX <= 320 and 200 <= touchY <= 240:
+      Speaker.tone(1500,50)
+      year = year + 1 if year < 2050 else 2025
+      yearImage()      # redraw just the year screen
+      isPressed = 0
+      print(str(touchX) + str(' ') + str(touchY))
+    elif 0 <= touchX <= 70 and 200 <= touchY <= 240:
+      Speaker.tone(1500,50)
+      year = year - 1 if year > 2025 else 2050
+      yearImage()      # redraw the year screen each time the year is changed by the user
+      isPressed = 0
+      print(str(touchX) + str(' ') + str(touchY))
+    elif 240 <= touchX <= 320 and 30 <= touchY <= 70:
+      Speaker.tone(1500,50)
+      print(str(touchX) + str(' ') + str(touchY))
+      screenNumber = 2
+      SetScreen()
+      isPressed = 0
+def monthButton():                                        # This function handles the touch to set the month and pass to day
+  global isPressed, screenNumber, oldDataundefined, month
+  if screenNumber == 2 and isPressed == 1:
+    if 240 <= touchX <= 320 and 200 <= touchY <= 240:
+      Speaker.tone(1500, 50)
+      month = (month if isinstance(month, (int, float)) else 0) + 1
+      if month > 12:                                                                          #If month gets above 12, reverts to 1
+        month = 1
+      monthImage()
+      isPressed = 0
+    elif 0 <= touchX <= 70 and 200 <= touchY <= 240:
+      Speaker.tone(1500, 50)
+      month = (month if isinstance(month, (int, float)) else 0) + -1
+      if month < 1:                                                                           #If month gets below 1, reverts to 12
+        month = 12
+      monthImage()
+      isPressed = 0
+    elif 240 <= touchX <= 320 and 30 <= touchY <= 70:
+      Speaker.tone(1500, 50)
+      screenNumber = 3
+      SetScreen()
+      isPressed = 0
+  else:
+      pass
+def dayButton():                                          # This function handles the touch to set the day and pass to hour
+  global isPressed, screenNumber, oldDataundefined, day
+  if screenNumber == 3 and isPressed == 1:
+    if 240 <= touchX <= 320 and 200 <= touchY <= 240:
+      Speaker.tone(1500, 50)
+      day = (day if isinstance(day, (int, float)) else 0) + 1
+      if day > 31:                                                                            #If day gets above 31, reverts to 1
+        day = 1
+      dayImage()
+      isPressed = 0
+    elif 0 <= touchX <= 70 and 200 <= touchY <= 240:
+      Speaker.tone(1500, 50)
+      day = (day if isinstance(day, (int, float)) else 0) + -1
+      if day < 1:                                                                             #If day gets below 1, reverts to 31
+        day = 31
+      dayImage()
+      isPressed = 0
+    elif 240 <= touchX <= 320 and 30 <= touchY <= 70:
+      Speaker.tone(1500, 50)
+      screenNumber = 4
+      SetScreen()
+      isPressed = 0
+  else:
+      pass
+def hourButton():                                         # This function handles the touch to set the hour and pass to minute
+  global isPressed, screenNumber, oldDataundefined, hour
+  if screenNumber == 4 and isPressed == 1:
+    if 240 <= touchX <= 320 and 200 <= touchY <= 240:
+      Speaker.tone(1500, 50)
+      hour = (hour if isinstance(hour, (int, float)) else 0) + 1
+      if hour > 23:                                                                           #If hour is above 23, reverts to 0
+        hour = 0
+      hourImage()
+      isPressed = 0
+    elif 0 <= touchX <= 70 and 200 <= touchY <= 240:
+      Speaker.tone(1500, 50)
+      hour = (hour if isinstance(hour, (int, float)) else 0) + -1
+      if hour < 0:                                                                            #If hour gets below 0, reverts to 23
+        hour = 23
+      hourImage()
+      isPressed = 0
+    elif 240 <= touchX <= 320 and 30 <= touchY <= 70:
+      Speaker.tone(1500, 50)
+      screenNumber = 5
+      SetScreen()
+      isPressed = 0
+  else:
+      pass
+def minuteButton():                                       # This function handles the touch to set the minute and pass to node count
+  global isPressed, screenNumber, oldDataundefined, minute
+  if screenNumber == 5 and isPressed == 1:
+    if 240 <= touchX <= 320 and 200 <= touchY <= 240:
+      Speaker.tone(1500, 50)
+      minute = (minute if isinstance(minute, (int, float)) else 0) + 1
+      if minute > 59:                                                                         #If the minute is above 59, reverts to 0
+        minute = 0
+      minuteImage()
+      isPressed = 0
+    elif 0 <= touchX <= 70 and 200 <= touchY <= 240:
+      Speaker.tone(1500, 50)
+      minute = (minute if isinstance(minute, (int, float)) else 0) + -1
+      if minute < 0:                                                                          #If the minute gets below 0, reverts to 59
+        minute = 59
+      minuteImage()
+      isPressed = 0
+    elif 240 <= touchX <= 320 and 30 <= touchY <= 70:
+      Speaker.tone(1500, 50)
+      screenNumber = 6
+      SetScreen()
+      isPressed = 0
+  else:
+      pass
+def nodeButton():                                         # This function handles the touch to set the node count and pass to node moisture desired
+  global isPressed, screenNumber, oldDataundefined, nodeCount
+  if screenNumber == 6 and isPressed == 1:
+    if 240 <= touchX <= 320 and 200 <= touchY <= 240:
+      Speaker.tone(1500, 50)
+      nodeCount = (nodeCount if isinstance(nodeCount, (int, float)) else 0) + 1
+      if nodeCount > 12:                                                                      #If node count is above 12, reverts to 0
+        nodeCount = 0
+      updateNodeLists()
+      nodeImage()
+      isPressed = 0
+    elif 0 <= touchX <= 70 and 200 <= touchY <= 240:
+      Speaker.tone(1500, 50)
+      nodeCount = (nodeCount if isinstance(nodeCount, (int, float)) else 0) + -1
+      if nodeCount < 0:                                                                       #If node count gets below 0, reverts to 12
+        nodeCount = 12
+      updateNodeLists()
+      nodeImage()
+      isPressed = 0
+    elif 240 <= touchX <= 320 and 30 <= touchY <= 70:
+      Speaker.tone(1500, 50)
+      screenNumber = 7
+      SetScreen()
+      isPressed = 0
+  else:
+      pass
+def moistDsrButton():                                     # This function handles the touch to set the node moisture desired and pass to phase
+  global isPressed, screenNumber, oldDataundefined, nodeMoistDsr, nodeNum, nodeCount
+  if screenNumber == 7 and isPressed == 1:
+    if 240 <= touchX <= 320 and 200 <= touchY <= 240:     #Sets node moisture level to Medium
+      Speaker.tone(1500, 50)
+      nodeMoistDsr[int(nodeNum)] = 'High'
+      moistureImage()
+      isPressed = 0
+    elif 110 <= touchX <= 220 and 200 <= touchY <= 240:   #Sets node moisture level to Medium
+      Speaker.tone(1500, 50)
+      nodeMoistDsr[int(nodeNum)] = 'Med'
+      moistureImage()
+      isPressed = 0
+    elif 0 <= touchX <= 70 and 200 <= touchY <= 240:      #Sets node moisture level to Low
+      Speaker.tone(1500, 50)
+      nodeMoistDsr[int(nodeNum)] = 'Low'
+      moistureImage()
+      isPressed = 0
+    elif 240 <= touchX <= 320 and 30 <= touchY <= 70:     #Go to next node
+      Speaker.tone(1500, 50)
+      if nodeNum < (nodeCount - 1):                       #If nodeNumb is less than nodeCount, increment nodeNum by 1
+        nodeNum += 1
+        moistureImage()
+      else:
+        screenNumber = 8                                  # If not, go to the next screen (phase image)
+        nodeNum = 0
+        SetScreen()
+      isPressed = 0
+  else:
+      pass
+def phaseDsrButton():                                     # This function handles the touch to set the phase desired and pass to main screen
+  global isPressed, screenNumber, oldDataundefined, phaseDsr
+  if screenNumber == 8 and isPressed == 1:
+    if 0 <= touchX <= 70 and 200 <= touchY <= 240:      #Sets phase to germination
+      Speaker.tone(1500, 50)
+      phaseDsr = 'Germ'
+      phaseImage()
+      isPressed = 0
+    elif 110 <= touchX <= 220 and 200 <= touchY <= 240: #Sets phase to vegetation
+      Speaker.tone(1500, 50)
+      phaseDsr = 'Vege'
+      phaseImage()
+      isPressed = 0
+    elif 240 <= touchX <= 320 and 200 <= touchY <= 240:    #Sets phase to Fruit
+      Speaker.tone(1500, 50)
+      phaseDsr = 'Fruit'
+      phaseImage()
+      isPressed = 0
+    elif 240 <= touchX <= 320 and 30 <= touchY <= 70:
+      Speaker.tone(1500, 50)
+      screenNumber = 0
+      menuSetupComplete = True
+      SetScreen()
+      isPressed = 0
+  else:
+      pass
+#The following functions handle mofidying variables
+def setVariables():                                       # This function sets the values of variables that are needed for comparison in other functions
+  global oldDataundefined, currentMinute, i, currentTime, phaseDsr, screenNumber, isPressed, year, month, day, hour, minute
+  global nodeNum, nodeCount, nodeMoistMeas, nodeMoistMeasPerc, nodeMoistDsr, nodeMoistDsrPerc, nodeMoistSecOn, pumpStartTime, pumpActive
+  global tempMeas, CO2meas, tempDsrMin, tempDsrMax, CO2dsr, heatPwr, fanPwr, tempCtrlStatus, startTempCtrl
+  global luxGerm, luxVege, luxFruit, luxGermMax, luxVegeMax, luxFruitMax, luxMax, luxMeas, luxRequired, luxDsr, ledPWM, panels, LEDnumbersRed, LEDnumbersGreen, LEDnumbersBlue
+  global lastMoistTime, lastHeatTime, lastLightTime, count, lastMainUpdate, lastResetDay, currentDay
+
+  menuSetupComplete = False
+  lastResetDay = 0
+  currentDay = 0
+  lastMainUpdate = 0
+  count = 0
+  oldDataundefined = 0
+  screenNumber = 0
+  isPressed = 0
+  year, month, day, hour, minute = 2025, 1, 1, 0, 0
+  luxGerm = 279
+  luxVege = 515
+  luxFruit = 624
+  tempDsrMin = 25
+  tempDsrMax = 35
+  CO2dsr = 400
+  CO2meas = 0
+  luxGermMax = 324
+  luxVegeMax = 327
+  luxFruitMax = 324
+  ppfdConstantSun = 0.0185
+  luxMeas = 0
+  tempMeas = 0
+  tempCtrlStatus = 'none'
+  nodeCount = 5
+  ppfdConstantLED = 0
+  luxMax = 0
+  luxRequired = 0
+  luxDsr = 0
+  ledPWM = 0
+  panels = 0
+  LEDnumbersRed = 0
+  LEDnumbersGreen = 0
+  LEDnumbersBlue = 0
+  lastMoistTime = 0
+  lastHeatTime = 0
+  lastLightTime = 0
+  currentMinute = 0
+  i = 0
+  currentTime = 0
+  phaseDsr = 'Germ'
+  nodeNum = 0
+  heatPwr = 0
+  fanPwr = 0
+  startTempCtrl = 0
+  nodeMoistDsr = ['Med'] * nodeCount                          # Default 'Med' for all nodes
+  nodeMoistMeas = [0] * nodeCount                             # Initialize with 0 values for all nodes
+  nodeMoistMeasPerc = [0] * nodeCount                         # Initialize with 0 values
+  nodeMoistDsrPerc = [0] * nodeCount                          # Initialize with 0 values
+  pumpStartTime = [0] * nodeCount                         # Initialize with 0 values for all nodes
+  nodeMoistSecOn = [0] * nodeCount                            # Initialize with 0 values for all nodes
+  pumpActive = [False] * nodeCount
+def convertMoisture():                                    # This function converts the desired moisture from a word to an int for comparison
+  global nodeCount, nodeMoistDsr, nodeMoistDsrPerc, nodeMoistSecOn
+  for i in range(min(nodeCount, 6)):
+    if nodeMoistDsr[i] == 'Low':
+      nodeMoistDsrPerc[i] = 55
+      nodeMoistSecOn[i] = 3688
+    elif nodeMoistDsr[i] == 'Med':
+      nodeMoistDsrPerc[i] = 65
+      nodeMoistSecOn[i] = 5529
+    elif nodeMoistDsr[i] == 'High':
+      nodeMoistDsrPerc[i] = 80
+      nodeMoistSecOn[i] = 7380
+def updateNodeLists():
+  global nodeCount, nodeMoistDsr, nodeMoistMeas, nodeMoistMeasPerc, nodeMoistDsrPerc, pumpStartTime, nodeMoistSecOn
+  current_length = len(nodeMoistDsr)
+  if nodeCount > current_length:                           # If nodeCount increased from the initial value of 5, extend the lists.
+    diff = nodeCount - current_length
+    nodeMoistDsr.extend(['Med'] * diff)
+    nodeMoistMeas.extend([0] * diff)
+    nodeMoistMeasPerc.extend([0] * diff)
+    nodeMoistDsrPerc.extend([0] * diff)
+    pumpStartTime.extend([0] * diff)
+    nodeMoistSecOn.extend([0] * diff)
+  elif nodeCount < current_length:                         # If nodeCount decreased from the initial value of 5, truncate the lists.
+    nodeMoistDsr = nodeMoistDsr[:nodeCount]
+    nodeMoistMeas = nodeMoistMeas[:nodeCount]
+    nodeMoistMeasPerc = nodeMoistMeasPerc[:nodeCount]
+    nodeMoistDsrPerc = nodeMoistDsrPerc[:nodeCount]
+    pumpStartTime = pumpStartTime[:nodeCount]
+    nodeMoistSecOn = nodeMoistSecOn[:nodeCount]
+
+def controlTemp():
+  global tempMeas, tempCtrlStatus, tempDsrMax, tempDsrMin, co2_0, CO2dsr, CO2meas, fanPwr, fan_0, heatPwr, relay_0, currentTime, startTempCtrl
+
+  tempMeas = co2_0.temperature
+  CO2meas = co2_0.co2
+  currentTime = time.localtime()
+  minute = currentTime[4]
+  # Temperature-based control
+  if tempMeas < tempDsrMin:
+    relay_0.value(1)
+    heatPwr = 1
+    fanPwr = 0
+    fan_0.value(0)
+    startTempCtrl = minute
+  elif tempMeas > tempDsrMax:
+    fan_0.value(1)
+    fanPwr = 1
+    heatPwr = 0
+    relay_0.value(0)
+    startTempCtrl = minute
+  else:
+    # Inside desired range
+    relay_0.value(0)
+    fan_0.value(0)
+    heatPwr = 0
+    fanPwr = 0
+  # Timer-based off logic
+  if heatPwr == 1 and (minute - startTempCtrl > 5 or minute - startTempCtrl < 0):
+    relay_0.value(0)
+    heatPwr = 0
+
+  if fanPwr == 1 and (minute - startTempCtrl > 15 or minute - startTempCtrl < 0):
+    fan_0.value(0)
+    fanPwr = 0
+  # CO2 fallback control
+  if (CO2meas < CO2dsr or CO2meas > 1200) and fanPwr == 0:
+    fan_0.value(1)
+    startTempCtrl = minute
+  if fanPwr == 0 and (minute - startTempCtrl > 5 or minute - startTempCtrl < 0):
+    fan_0.value(0)
+  # Status string
+  if fanPwr == 1:
+    tempCtrlStatus = 'Fan On'
+  elif heatPwr == 1:
+    tempCtrlStatus = 'Heater On'
+  else:
+    tempCtrlStatus = 'None'
+def controlLight():                                           # This function measures the ambient lux, then compares it to the desired lux based on phase. If within the light window, it will then turn on the LEDs enough to meet the required lux
+  global dlight_0, luxMeas, currentTime, luxRequired, ledPWM, rgb_0, ppfdConstantLED, ppfdConstantSun
+  luxRequired = 0
+  luxMeas = dlight_0.get_lux()                                #polls light sensor for lux levels
+  current_time = time.gmtime()[3]
+def controlMoisture():                                        # This function reads the raw ADC from each moisture sensor and then turns on the pump if it is too low
+  global nodeMoistMeasPerc, nodeMoistMeas, nodeCount, pbhub_0, startMoistureCtrl, nodeMoistSecOn, pumpActive, pumpStartTime
+  for i in range(min(nodeCount, 6)):                          #This reads the moisture levels of each node
+    nodeMoistMeas[i] = pbhub_0.analog_read(i)
+    nodeMoistMeasPerc[i] = round(100 - ((nodeMoistMeas[i] / 4095) * 100), 0) #This converts the reading that is based on 4096bits to a percentage dry, then subtracts from 100 for percentage wet
+  for i in range(min(nodeCount, 6)):                          #This compares the moisture level measured and then turns on the pump for 5 seconds if needed
+    if nodeMoistMeasPerc[i] < nodeMoistDsrPerc[i]:            # If the moisture is below the desired level, consider turning the pump on.
+      if not pumpActive[i]:                                   # If the pump is not already active, start it.
+        pbhub_0.digital_write(i, 0, 1)
+        pumpStartTime[i] = time.ticks_ms()
+        pumpActive[i] = True
+    if pumpActive[i]:                                         # If the pump is active, check if it has run long enough.
+      if time.ticks_diff(time.ticks_ms(), pumpStartTime[i]) >= nodeMoistSecOn[i]:
+        pbhub_0.digital_write(i, 0, 0)
+        pumpActive[i] = False
+
+def setup():
+  global title0, leftOne, leftTwo, leftThree, leftFour, leftFive, middleTop, middleMiddle, leftBottom, middleBottom, rightBottom, rightTop, rightMiddle, view, screenNumber, e
+  global i2c0, pahub_0, relay_0, dlight_0, pbhub_0, pbhub_1, co2_0, fan_0
+  global oldDataundefined, currentMinute, i, currentTime, phaseDsr, isPressed, count, co2Ready
+  global nodeNum, nodeCount, nodeMoistMeas, nodeMoistMeasPerc, nodeMoistDsr, nodeMoistDsrPerc, nodeMoistSecOn, startMoistureCtrl
+  global tempMeas, CO2meas, tempDsrMin, tempDsrMax, CO2dsr, heatPwr, fanPwr, tempCtrlStatus, startTempCtrl
+  global luxGerm, luxVege, luxFruit, luxGermMax, luxVegeMax, luxFruitMax, luxMax, luxMeas, luxRequired, luxDsr, ledPWM, panels, LEDnumbersRed, LEDnumbersGreen, LEDnumbersBlue
+  global lastMoistTime, lastHeatTime, lastLightTime
+  
+  M5.begin()
+
+  #This declares all of the labels on the screen
+  title0 = Widgets.Title("", 5, 0xffffff, 0x6c6cd3, Widgets.FONTS.DejaVu24)
+  leftOne = Widgets.Label("", 0, 30, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+  leftTwo = Widgets.Label("", 0, 60, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+  leftThree = Widgets.Label("", 0, 90, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+  leftFour = Widgets.Label("", 0, 120, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+  leftFive = Widgets.Label("", 0, 150, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+  middleTop = Widgets.Label("", 131, 60, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu24)
+  middleMiddle = Widgets.Label("", 133, 108, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu24)
+  leftBottom = Widgets.Label("", 0, 210, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu24)
+  middleBottom = Widgets.Label("", 125, 210, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu24)
+  rightBottom = Widgets.Label("", 242, 210, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu24)
+  rightTop = Widgets.Label("", 252, 30, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu24)
+  rightMiddle = Widgets.Label("", 260, 105, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu24)
+
+  #These initiate the connection between the M5stack CoreS3 and the Atom-Lite for the light control
+  w0 = network.WLAN(network.STA_IF)                       #Initiates WiFi for connections
+  w0.active(True)                                         #Starts WiFI
+  e = espnow.ESPNow()                                     #Initiates ESPNow for connection to ATOM-Lite
+  e.active(True)                                          #Starts ESPNow
+  peer_mac = b'\x90\x15\x06\xfa\x7d\x7c'                  #Peers to ATOM-Lite b'\x24\x58\x7c\xe9\x4f\xb4'
+  try:
+    e.add_peer(peer_mac)
+  except OSError as err:
+    if "ESP_ERR_ESPNOW_EXIST" in str(err):
+      print("Peer already exists, skipping...")
+    else:
+      raise                                             #Starts connection to ATOM-Lite
+
+  i2c0 = I2C(0, scl=Pin(1), sda=Pin(2), freq=100000)    #Sets I2C connection for PaHub
+  co2_0 = CO2Unit(i2c=i2c0, address=0x62)               # CO2 sensor address (0x62, decimal 98)
+  dlight_0 = DLightUnit(i2c=i2c0, address=0x23)         # DLight address (0x23, decimal 35)
+  pbhub_0 = PBHUBUnit(i2c=i2c0, address=0x61)           # PbHub address (0x61, decimal 97)
+  relay_0 = Pin(17, Pin.OUT)                            #Connected to Port.C
+  fan_0 = Pin(9, Pin.OUT)                               #Connected to Port.B
+  dlight_0.configure(dlight_0.CONTINUOUSLY, dlight_0.H_RESOLUTION_MODE)
+
+  setVariables()
+  SetScreen()
+  Speaker.setVolumePercentage(0.1)
+
+def loop():
+  M5.update()
+
+  global title0, leftOne, leftTwo, leftThree, leftFour, leftFive, middleTop, middleMiddle, leftBottom, middleBottom, rightBottom, rightTop, rightMiddle, touchX, touchY, view, isPressed, count
+  global i2c0, pahub_0, relay_0, dlight_0, pbhub_0, pbhub_1, co2_0, fan_0
+  global currentMinute, i, currentTime, lastMoistTime, lastHeatTime, lastLightTime, lastMainUpdate
+  global nodeNum, nodeCount, nodeMoistMeas, nodeMoistMeasPerc, nodeMoistDsr, nodeMoistDsrPerc, nodeMoistSecOn, startMoistureCtrl
+  global tempMeas, CO2meas, tempDsrMin, tempDsrMax, CO2dsr, heatPwr, fanPwr, tempCtrlStatus, startTempCtrl
+  global luxGerm, luxVege, luxFruit, luxGermMax, luxVegeMax, luxFruitMax, luxMax, luxMeas, luxRequired, luxDsr, ledPWM, panels, LEDnumbersRed, LEDnumbersGreen, LEDnumbersBlue
+  global oldDataundefined, phaseDsr
+
+  # —— debounce & capture the “press” event exactly once —— 
+  count = M5.Touch.getCount()
+  if count != oldDataundefined:
+    oldDataundefined = count
+    if count:  # finger just went down
+      isPressed  = 1
+      touchX = M5.Touch.getX()
+      touchY = M5.Touch.getY()
+    else:      # finger released
+      isPressed = 0
+
+  convertMoisture()
+  menuButton()
+  yearButton()
+  monthButton()
+  dayButton()
+  hourButton()
+  minuteButton()
+  nodeButton()
+  moistDsrButton()
+  phaseDsrButton()
+
+  if menuSetupComplete:
+    controlSchedule()
+  if screenNumber == 0 and time.ticks_diff(time.ticks_ms(), lastMainUpdate) > 5000:
+    mainImage()
+    lastMainUpdate = time.ticks_ms()
+
+
+if __name__ == '__main__':
+  try:
+    setup()
+    while True:
+      loop()
+  except (Exception, KeyboardInterrupt) as e:
+    try:
+      from utility import print_error_msg
+      print_error_msg(e)
+    except ImportError:
+      print("please update to latest firmware")
