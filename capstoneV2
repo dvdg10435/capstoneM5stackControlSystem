@@ -1,0 +1,932 @@
+#This code includes a PaHUb for testing
+import os
+import sys
+import io
+import time, ujson
+from machine import I2C, Pin
+import M5
+from M5 import *
+from unit import PAHUBUnit, CO2Unit, DLightUnit, WateringUnit, RelayUnit, FanUnit, PBHUBUnit
+import ds3231
+from hardware import I2C
+
+"""Global Variables: (Used to confirm that all variables are declared in functions correctly)
+    - Date/Time: year, month, day, hour, minute
+    - Moisture sensor & pump control:
+          nodeCount, nodeNum, nodeMoistDsr (desired), nodeMoistMeas, nodeMoistMeasPerc,
+          nodeMoistDsrPerc (converted desired level), nodeMoistSecOn (pump on duration),
+          pumpActive, pumpStartTime.
+    - Temperature & CO2 control: tempMeas, tempCtrlStatus, tempDsrMin, tempDsrMax, CO2dsr, CO2meas
+    - Light & LED control: luxMeas, luxRequired, luxDsr, luxMax, ledPWM, ppfdConstantSun, ppfdConstantLED, panels, LEDnumbersRed, LEDnumbersGreen, LEDnumbersBlue
+    - System/UI: screenNumber, isPressed, menuSetupComplete, oldDataundefined, lastMoistTime, lastHeatTime, lastLightTime, lastMainUpdate, lastResetDay, currentDay, count
+"""
+title0 = None
+leftOne = None
+leftTwo = None
+leftThree = None
+leftFour = None
+leftFive = None
+leftSix = None
+middleTop = None
+middleMiddle = None
+leftBottom = None
+middleBottom = None
+rightBottom = None
+rightTop = None
+rightMiddle = None
+pahub_0 = None         # The PaHUB instance
+dlight_0 = None        # DLight on channel 0
+co2_0 = None           # CO2 unit on channel 1
+pbhub_0 = None         # PbHUB on channel 2
+pbhub_1 = None         # PbHUB on channel 3
+rgb_0 = None           # RGB LED panels on channel 5
+
+# ----- The following functions handle the views, or 'images', for the different screens that the user will interact with.
+def hideAllLabels():                                      # This function turns off all the labels. It is called in every view to reset the screen before adding the needed labels back on
+  global title0, leftOne, leftTwo, leftThree, leftFour, leftFive, leftSix, middleTop, middleMiddle, leftBottom, middleBottom, rightBottom, rightTop, rightMiddle
+  leftOne.setVisible(False)
+  leftTwo.setVisible(False)
+  leftThree.setVisible(False)
+  leftFour.setVisible(False)
+  leftFive.setVisible(False)
+  leftSix.setVisible(False)
+  leftBottom.setVisible(False)
+  middleTop.setVisible(False)
+  middleMiddle.setVisible(False)
+  middleBottom.setVisible(False)
+  rightTop.setVisible(False)
+  rightMiddle.setVisible(False)
+  rightBottom.setVisible(False)
+  leftOne.setFont(Widgets.FONTS.DejaVu18)
+  leftTwo.setFont(Widgets.FONTS.DejaVu18)
+  leftThree.setFont(Widgets.FONTS.DejaVu18)
+  leftFour.setFont(Widgets.FONTS.DejaVu18)
+  leftFive.setFont(Widgets.FONTS.DejaVu18)
+  leftSix.setFont(Widgets.FONTS.DejaVu18)
+  M5.Lcd.clear(0x000000)
+def SetScreen():                                          # This function sets the screen according to the numbers
+  global title0, leftOne, leftTwo, leftThree, leftFour, leftFive, middleTop, middleMiddle, leftBottom, middleBottom, rightBottom, rightTop, rightMiddle
+  if screenNumber == 0:
+    hideAllLabels()
+    mainImage()
+  elif screenNumber == 1:
+    hideAllLabels()
+    yearImage()
+  elif screenNumber == 2:
+    hideAllLabels()
+    monthImage()
+  elif screenNumber == 3:
+    hideAllLabels()
+    dayImage()
+  elif screenNumber == 4:
+    hideAllLabels()
+    hourImage()
+  elif screenNumber == 5:
+    hideAllLabels()
+    minuteImage()
+  elif screenNumber == 6:
+    hideAllLabels()
+    nodeImage()
+  elif screenNumber == 7:
+    hideAllLabels()
+    moistureImage()
+  elif screenNumber == 8:
+    hideAllLabels()
+    phaseImage()
+  else:
+    hideAllLabels()
+    mainImage()
+def mainImage():                                          # This function sets the display for the main scree
+  global leftOne, leftTwo, leftThree, leftFour, leftFive, leftSix, middleBottom
+  title0.setVisible(True)
+  title0.setText('Smart Greenhouse')
+  leftOne.setVisible(True)
+  leftTwo.setVisible(True)
+  leftThree.setVisible(True)
+  leftFour.setVisible(True)
+  leftFive.setVisible(True)
+  leftSix.setVisible(True)
+  middleBottom.setVisible(True)
+  leftOne.setText("Date: {}/{}/{}  Time: {:02d}:{:02d}".format((time.gmtime())[0], (time.gmtime())[1], (time.gmtime())[2],(time.gmtime())[3], (time.gmtime())[4]))
+  leftTwo.setText(str('Temp: ') + str(co2_0.is_data_ready()) + ' ' + str(tempMeas))
+  leftThree.setText(str('Amb Light: ') + str(luxMeas))
+  leftFour.setText(str('Heat Ctrl Sts: ') + str(tempCtrlStatus))
+  leftFive.setText(str('Moist Lvls: ') + str('0: ') + str(nodeMoistMeasPerc[0]) + str(', 1:') + str(nodeMoistMeasPerc[1]))
+  leftSix.setText(str('2: ') + str(nodeMoistMeasPerc[2]) + str(', 4: ') + str(nodeMoistMeasPerc[3]) + str(', 5: ') + str(nodeMoistMeasPerc[4]))
+  middleBottom.setText(str('MENU'))
+def yearImage():                                          # This function sets the display to set the year
+  global middleTop, middleMiddle, rightTop, leftBottom, rightBottom, title0, year
+  title0.setVisible(True)
+  title0.setText('Set Date/Time')
+  middleTop.setVisible(True)
+  middleMiddle.setVisible(True)
+  rightTop.setVisible(True)
+  leftBottom.setVisible(True)
+  rightBottom.setVisible(True)
+  rightTop.setText('Next')
+  leftBottom.setText('Down')
+  rightBottom.setText('Up')
+  middleTop.setText('Year')
+  middleMiddle.setText(str(year))
+def monthImage():                                         # This function sets the display to set the month
+  global title0, middleTop, middleMiddle, rightTop, leftBottom, rightBottom, month
+  title0.setVisible(True)
+  title0.setText('Set Date/Time')
+  middleTop.setVisible(True)
+  middleMiddle.setVisible(True)
+  rightTop.setVisible(True)
+  leftBottom.setVisible(True)
+  rightBottom.setVisible(True)
+  rightTop.setText('Next')
+  leftBottom.setText('Down')
+  rightBottom.setText('Up')
+  middleTop.setText('Month')
+  middleMiddle.setText(str(month))
+def dayImage():                                           # This function sets the display to set the day
+  global title0, middleTop, middleMiddle, rightTop, leftBottom, rightBottom, day
+  title0.setVisible(True)
+  title0.setText('Set Date/Time')
+  middleTop.setVisible(True)
+  middleMiddle.setVisible(True)
+  rightTop.setVisible(True)
+  leftBottom.setVisible(True)
+  rightBottom.setVisible(True)
+  rightTop.setText('Next')
+  leftBottom.setText('Down')
+  rightBottom.setText('Up')
+  middleTop.setText('Day')
+  middleMiddle.setText(str(day))
+def hourImage():                                          # This function sets the display to set the hour
+  global title0, middleTop, middleMiddle, rightTop, leftBottom, rightBottom, hour
+  title0.setVisible(True)
+  title0.setText('Set Date/Time')
+  middleTop.setVisible(True)
+  middleMiddle.setVisible(True)
+  rightTop.setVisible(True)
+  leftBottom.setVisible(True)
+  rightBottom.setVisible(True)
+  rightTop.setText('Next')
+  leftBottom.setText('Down')
+  rightBottom.setText('Up')
+  middleTop.setText('Hour')
+  middleMiddle.setText(str(hour))  
+def minuteImage():                                        # This function sets the display to set the minute
+  global title0, middleTop, middleMiddle, rightTop, leftBottom, rightBottom, minute
+  title0.setVisible(True)
+  title0.setText('Set Date/Time')
+  middleTop.setVisible(True)
+  middleMiddle.setVisible(True)
+  rightTop.setVisible(True)
+  leftBottom.setVisible(True)
+  rightBottom.setVisible(True)
+  rightTop.setText('Next')
+  leftBottom.setText('Down')
+  rightBottom.setText('Up')
+  middleTop.setText('Minute')
+  middleMiddle.setText(str(minute))  
+def nodeImage():                                          # This function sets the display to set the node count
+  global title0, middleTop, middleMiddle, rightTop, leftBottom, rightBottom, nodeCount
+  title0.setVisible(True)
+  title0.setText('Set Node Count')
+  middleTop.setVisible(True)
+  middleMiddle.setVisible(True)
+  rightTop.setVisible(True)
+  leftBottom.setVisible(True)
+  rightBottom.setVisible(True)
+  rightTop.setText('Next')
+  leftBottom.setText('Down')
+  rightBottom.setText('Up')
+  middleTop.setText('Node Count')
+  middleMiddle.setText(str(nodeCount))  
+def moistureImage():                                      # This function sets the display to set the moisture for each node
+  global title0, middleTop, middleMiddle, rightTop, leftBottom, rightBottom, moistDsr
+  title0.setVisible(True)
+  title0.setText('Set Node Moisture')
+  middleTop.setVisible(True)
+  middleMiddle.setVisible(True)
+  rightTop.setVisible(True)
+  leftBottom.setVisible(True)
+  middleBottom.setVisible(True)
+  rightBottom.setVisible(True)
+  rightTop.setText('Next')
+  leftBottom.setText('Low')
+  middleBottom.setText('Med')
+  rightBottom.setText('High')
+  middleTop.setText(str('# ') + str(nodeNum))
+  middleMiddle.setText(str(nodeMoistDsr[nodeNum]))  
+def phaseImage():                                         # This function sets the display to set the phase desired
+  global title0, middleTop, middleMiddle, rightTop, leftBottom, rightBottom, phaseDsr
+  title0.setVisible(True)
+  title0.setText('Set Phase')
+  middleTop.setVisible(True)
+  middleMiddle.setVisible(True)
+  rightTop.setVisible(True)
+  leftBottom.setVisible(True)
+  middleBottom.setVisible(True)
+  rightBottom.setVisible(True)
+  rightTop.setText('Done')
+  leftBottom.setText('Germ')
+  middleBottom.setText('Vege')
+  rightBottom.setText('Fruit')
+  middleTop.setText('Phase')
+  middleMiddle.setText(str(phaseDsr))  
+# ----- The following functions handle the touches for the menus on the system
+def menuButton():                                         # This function handles the touch from the main screen to open the menu
+  global isPressed, screenNumber, menuSetupComplete
+  if screenNumber == 0 and isPressed == 1 and 110 <= touchX <= 220 and 200 <= touchY <= 240: # only fire on a fresh press inside that rectangle
+    Speaker.tone(1500, 50)
+    menuSetupComplete = False
+    print(str(touchX) + str(' ') + str(touchY))
+    screenNumber = 1
+    SetScreen()
+    isPressed = 0   # consume this tap
+def yearButton():                                         # This function handles the touch to set the year and pass to the month
+  global isPressed, screenNumber, year
+  if screenNumber == 1 and isPressed == 1:
+    if 240 <= touchX <= 320 and 200 <= touchY <= 240:
+      Speaker.tone(1500,50)
+      year = year + 1 if year < 2050 else 2025
+      yearImage()      # redraw just the year screen
+      isPressed = 0
+      print(str(touchX) + str(' ') + str(touchY))
+    elif 0 <= touchX <= 70 and 200 <= touchY <= 240:
+      Speaker.tone(1500,50)
+      year = year - 1 if year > 2025 else 2050
+      yearImage()      # redraw the year screen each time the year is changed by the user
+      isPressed = 0
+      print(str(touchX) + str(' ') + str(touchY))
+    elif 240 <= touchX <= 320 and 30 <= touchY <= 70:
+      Speaker.tone(1500,50)
+      print(str(touchX) + str(' ') + str(touchY))
+      screenNumber = 2
+      SetScreen()
+      isPressed = 0
+def monthButton():                                        # This function handles the touch to set the month and pass to day
+  global isPressed, screenNumber, oldDataundefined, month
+  if screenNumber == 2 and isPressed == 1:
+    if 240 <= touchX <= 320 and 200 <= touchY <= 240:
+      Speaker.tone(1500, 50)
+      month = (month if isinstance(month, (int, float)) else 0) + 1
+      if month > 12:                                                                          #If month gets above 12, reverts to 1
+        month = 1
+      monthImage()
+      isPressed = 0
+    elif 0 <= touchX <= 70 and 200 <= touchY <= 240:
+      Speaker.tone(1500, 50)
+      month = (month if isinstance(month, (int, float)) else 0) + -1
+      if month < 1:                                                                           #If month gets below 1, reverts to 12
+        month = 12
+      monthImage()
+      isPressed = 0
+    elif 240 <= touchX <= 320 and 30 <= touchY <= 70:
+      Speaker.tone(1500, 50)
+      screenNumber = 3
+      SetScreen()
+      isPressed = 0
+  else:
+    pass
+def dayButton():                                          # This function handles the touch to set the day and pass to hour
+  global isPressed, screenNumber, oldDataundefined, day
+  if screenNumber == 3 and isPressed == 1:
+    if 240 <= touchX <= 320 and 200 <= touchY <= 240:
+      Speaker.tone(1500, 50)
+      day = (day if isinstance(day, (int, float)) else 0) + 1
+      if day > 31:                                                                            #If day gets above 31, reverts to 1
+        day = 1
+      dayImage()
+      isPressed = 0
+    elif 0 <= touchX <= 70 and 200 <= touchY <= 240:
+      Speaker.tone(1500, 50)
+      day = (day if isinstance(day, (int, float)) else 0) + -1
+      if day < 1:                                                                             #If day gets below 1, reverts to 31
+        day = 31
+      dayImage()
+      isPressed = 0
+    elif 240 <= touchX <= 320 and 30 <= touchY <= 70:
+      Speaker.tone(1500, 50)
+      screenNumber = 4
+      SetScreen()
+      isPressed = 0
+  else:
+    pass
+def hourButton():                                         # This function handles the touch to set the hour and pass to minute
+  global isPressed, screenNumber, oldDataundefined, hour
+  if screenNumber == 4 and isPressed == 1:
+    if 240 <= touchX <= 320 and 200 <= touchY <= 240:
+      Speaker.tone(1500, 50)
+      hour = (hour if isinstance(hour, (int, float)) else 0) + 1
+      if hour > 23:                                                                           #If hour is above 23, reverts to 0
+        hour = 0
+      hourImage()
+      isPressed = 0
+    elif 0 <= touchX <= 70 and 200 <= touchY <= 240:
+      Speaker.tone(1500, 50)
+      hour = (hour if isinstance(hour, (int, float)) else 0) + -1
+      if hour < 0:                                                                            #If hour gets below 0, reverts to 23
+        hour = 23
+      hourImage()
+      isPressed = 0
+    elif 240 <= touchX <= 320 and 30 <= touchY <= 70:
+      Speaker.tone(1500, 50)
+      screenNumber = 5
+      SetScreen()
+      isPressed = 0
+  else:
+    pass
+def minuteButton():                                       # This function handles the touch to set the minute and pass to node count
+  global isPressed, screenNumber, oldDataundefined, minute
+  if screenNumber == 5 and isPressed == 1:
+    if 240 <= touchX <= 320 and 200 <= touchY <= 240:
+      Speaker.tone(1500, 50)
+      minute = (minute if isinstance(minute, (int, float)) else 0) + 1
+      if minute > 59:                                                                         #If the minute is above 59, reverts to 0
+        minute = 0
+      minuteImage()
+      isPressed = 0
+    elif 0 <= touchX <= 70 and 200 <= touchY <= 240:
+      Speaker.tone(1500, 50)
+      minute = (minute if isinstance(minute, (int, float)) else 0) + -1
+      if minute < 0:                                                                          #If the minute gets below 0, reverts to 59
+        minute = 59
+      minuteImage()
+      isPressed = 0
+    elif 240 <= touchX <= 320 and 30 <= touchY <= 70:
+      Speaker.tone(1500, 50)
+      screenNumber = 6
+      storeTimeToRTC()
+      SetScreen()
+      isPressed = 0
+  else:
+    pass
+def nodeButton():                                         # This function handles the touch to set the node count and pass to node moisture desired
+  global isPressed, screenNumber, oldDataundefined, nodeCount
+  if screenNumber == 6 and isPressed == 1:
+    if 240 <= touchX <= 320 and 200 <= touchY <= 240:
+      Speaker.tone(1500, 50)
+      nodeCount = (nodeCount if isinstance(nodeCount, (int, float)) else 0) + 1
+      if nodeCount > 12:                                                                      #If node count is above 12, reverts to 0
+        nodeCount = 0
+      updateNodeLists()
+      nodeImage()
+      isPressed = 0
+    elif 0 <= touchX <= 70 and 200 <= touchY <= 240:
+      Speaker.tone(1500, 50)
+      nodeCount = (nodeCount if isinstance(nodeCount, (int, float)) else 0) + -1
+      if nodeCount < 0:                                                                       #If node count gets below 0, reverts to 12
+        nodeCount = 12
+      updateNodeLists()
+      nodeImage()
+      isPressed = 0
+    elif 240 <= touchX <= 320 and 30 <= touchY <= 70:
+      Speaker.tone(1500, 50)
+      screenNumber = 7
+      SetScreen()
+      isPressed = 0
+  else:
+    pass
+def moistDsrButton():                                     # This function handles the touch to set the node moisture desired and pass to phase
+  global isPressed, screenNumber, oldDataundefined, nodeMoistDsr, nodeNum, nodeCount
+  if screenNumber == 7 and isPressed == 1:
+    if 240 <= touchX <= 320 and 200 <= touchY <= 240:     #Sets node moisture level to Medium
+      Speaker.tone(1500, 50)
+      nodeMoistDsr[int(nodeNum)] = 'High'
+      moistureImage()
+      isPressed = 0
+    elif 110 <= touchX <= 220 and 200 <= touchY <= 240:   #Sets node moisture level to Medium
+      Speaker.tone(1500, 50)
+      nodeMoistDsr[int(nodeNum)] = 'Med'
+      moistureImage()
+      isPressed = 0
+    elif 0 <= touchX <= 70 and 200 <= touchY <= 240:      #Sets node moisture level to Low
+      Speaker.tone(1500, 50)
+      nodeMoistDsr[int(nodeNum)] = 'Low'
+      moistureImage()
+      isPressed = 0
+    elif 240 <= touchX <= 320 and 30 <= touchY <= 70:     #Go to next node
+      Speaker.tone(1500, 50)
+      if nodeNum < (nodeCount - 1):                       #If nodeNumb is less than nodeCount, increment nodeNum by 1
+        nodeNum += 1
+        moistureImage()
+      else:
+        screenNumber = 8                                  # If not, go to the next screen (phase image)
+        nodeNum = 0
+        convertMoisture()
+        SetScreen()
+      isPressed = 0
+  else:
+    pass
+def phaseDsrButton():                                     # This function handles the touch to set the phase desired and pass to main screen
+  global isPressed, screenNumber, oldDataundefined, phaseDsr, menuSetupComplete
+  if screenNumber == 8 and isPressed == 1:
+    if 0 <= touchX <= 70 and 200 <= touchY <= 240:      #Sets phase to germination
+      Speaker.tone(1500, 50)
+      phaseDsr = 'Germ'
+      phaseImage()
+      isPressed = 0
+    elif 110 <= touchX <= 220 and 200 <= touchY <= 240: #Sets phase to vegetation
+      Speaker.tone(1500, 50)
+      phaseDsr = 'Vege'
+      phaseImage()
+      isPressed = 0
+    elif 240 <= touchX <= 320 and 200 <= touchY <= 240:    #Sets phase to Fruit
+      Speaker.tone(1500, 50)
+      phaseDsr = 'Fruit'
+      phaseImage()
+      isPressed = 0
+    elif 240 <= touchX <= 320 and 30 <= touchY <= 70:
+      Speaker.tone(1500, 50)
+      screenNumber = 0
+      menuSetupComplete = True
+      controlLightPattern()
+      SetScreen()
+      isPressed = 0
+  else:
+      pass
+# ----- The following functions handle the subsystem control
+def controlSchedule():
+  """
+  This function uses the clock to trigger the moisture, temperature, and light subsystems.
+  It resets the last-run times when the day changes (using lastResetDay and currentDay)
+  and then checks if enough minutes have elapsed to run each subsystem.
+  """
+  global currentMinute, lastHeatTime, lastLightTime, lastMoistTime, currentDay, lastResetDay
+
+  # ----- Update the current day and reset subsystem timers at day-change
+  currentDay = (time.localtime())[2]               # Get the current day of the month
+  if currentDay != lastResetDay:                  # If day has changed
+    lastResetDay   = currentDay                     # Update lastResetDay to the current day
+    lastMoistTime  = 0                              # Reset moisture control timer (start value 0)
+    lastHeatTime   = 2                              # Reset temperature control timer (staggered start value)
+    lastLightTime  = 4                              # Reset light control timer (staggered start value)
+  # ----- Calculate current time in minutes since midnight
+  currentMinute = ((time.localtime())[3] * 60) + (time.localtime())[4]  # (Hour * 60) + Minute
+  # ----- Run Moisture Control if more than 60 minutes have passed since the last run
+  if currentMinute - lastMoistTime > 60:
+    logControlStart("Moisture")                     # Log the start event for moisture control
+    controlMoisture()                               # Call the moisture control function
+    lastMoistTime = currentMinute                   # Update the last time moisture was controlled
+  # ----- Run Temperature Control if more than 30 minutes have passed since the last run
+  if currentMinute - lastHeatTime > 30:
+    logControlStart("Temp")                         # Log the start event for temperature control
+    controlTemp()                                   # Call the temperature control function
+    lastHeatTime = currentMinute                    # Update the last time temperature was controlled
+  # ----- Run Light Control if more than 5 minutes have passed since the last run
+  if currentMinute - lastLightTime > 5:
+    logControlStart("Light")                        # Log the start event for light control
+    controlLight()                                  # Call the light control function
+    lastLightTime = currentMinute                   # Update the last time light was controlled
+def controlLightPattern():                                    #This function sets the patterns for rgb_x
+  global phaseDsr, LEDnumbersBlue, LEDnumbersGreen, LEDnumbersRed, rgb_0, panels, luxDsr, luxMax
+  
+  leds_per_panel = 37
+  if phaseDsr == 'Germ':                                      #Sets the pattern for Germ phase
+    base_red = [1, 3, 3, 7, 9, 11, 15, 17, 19, 23, 25, 27, 29, 33, 35, 37]
+    base_green = [5, 13, 21, 31]
+    base_blue = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36]
+    luxDsr = luxGerm
+    luxMax = luxGermMax
+    ppfdConstantLED = 0.897
+  elif phaseDsr == 'Vege':                                    #Sets the pattern for Vege phase
+    base_red = [1, 2, 4, 5, 6, 8, 9, 11, 12, 13, 15, 16, 18, 19, 20, 22, 23, 25, 26, 27, 29, 30, 32, 33, 34, 36, 37]
+    base_green = [7, 14, 17, 28, 35]
+    base_blue = [3, 10, 21, 24, 31]
+    luxDsr = luxVege
+    luxMax = luxVegeMax
+    ppfdConstantLED = 0.873
+  elif phaseDsr == 'Fruit':                                   #Sets pattern for Fruit phase
+    base_red = [1, 2, 4, 5, 6, 7, 9, 10, 12, 13, 14, 15, 17, 18, 20, 22, 23, 25, 26, 28, 29, 30, 31, 33, 34, 36, 37]
+    base_green = [8, 16, 21, 32]
+    base_blue = [3, 11, 19, 24, 27, 35]
+    luxDsr = luxFruit
+    luxMax = luxFruitMax
+    ppfdConstantLED = 0.8811
+  # Calls repeatPattern to repeat the pattern on all of the panels that are daisy chained
+  LEDnumbersRed = repeatPattern(base_red, panels, leds_per_panel)
+  LEDnumbersGreen = repeatPattern(base_green, panels, leds_per_panel)
+  LEDnumbersBlue = repeatPattern(base_blue, panels, leds_per_panel)
+def repeatPattern(base_pattern, panels=3, leds_per_panel=37): #This function takes the patterns from the control patterns function and multiplies it based on how many panels are assigned to each rbg_x
+  pattern = []
+  for p in range(panels):
+    pattern.extend([led + p * leds_per_panel for led in base_pattern])
+  return pattern
+def setLedPatternPWM():
+  """
+  Sets the LED panel pattern and brightness by sending a control command over I2C
+  via PaHUB channel 5. This function builds a JSON payload containing:
+    - The lists of LED indices for red, green, and blue channels.
+    - The brightness level (PWM value) as computed by controlLight().
+  The PaHUB channel 5 is selected before the write and released afterward.
+  """
+  global LEDnumbersRed, LEDnumbersGreen, LEDnumbersBlue, ledPWM, pahub_0
+  # Construct the payload (adjust the keys/format if your panel expects something different)
+  payload = {
+    "r": LEDnumbersRed,
+    "g": LEDnumbersGreen,
+    "b": LEDnumbersBlue,
+    "brightness": ledPWM
+  }
+  # Convert the payload to a JSON string then to bytes
+  cmd_str = ujson.dumps(payload)
+  data = cmd_str.encode('utf-8')
+  
+  # Set the LED panel’s I2C address (update this to match your hardware)
+  LED_I2C_ADDR = 0x50  # <-- Change this placeholder if necessary
+  
+  # Select PaHUB channel 5 for the LED control
+  pahub_0.select_channel(5)
+  try:
+    # Write the LED control command over I2C
+    pahub_0.writeto(LED_I2C_ADDR, data)
+    print("LED command sent:", cmd_str)
+  except Exception as e:
+    print("Error sending LED pattern & PWM:", e)
+  finally:
+    # Release the channel when finished
+    pahub_0.release_channel(5)
+def controlLight():
+  """
+  Reads the ambient light value from the light sensor, calculates the required LED brightness 
+  if additional lighting is needed during the light window, and then updates the LED panel 
+  pattern and PWM by calling set_led_pattern_and_pwm().
+  """
+  global dlight_0, luxMeas, luxRequired, ledPWM, pahub_0
+  global ppfdConstantLED, ppfdConstantSun, luxDsr, luxMax
+  
+  # Read the ambient lux value from the DLight sensor.
+  # (Select channel 0 as that’s where the quantum light sensor is connected.)
+  pahub_0.select_channel(0)
+  luxMeas = dlight_0.get_lux()
+  pahub_0.release_channel(0)
+  
+  current_hour = time.gmtime()[3]  # current hour in GMT (adjust if you need local time)
+  
+  # Check that we are within the light window and that the ambient lux is below the desired value.
+  if 6 < current_hour < 21 and luxMeas < luxDsr:
+    ppfd_sun = luxMeas * ppfdConstantSun
+    ppfd_needed = (luxDsr * ppfdConstantLED) - ppfd_sun
+    if ppfd_needed > 0:
+      luxRequired = ppfd_needed / ppfdConstantLED
+      # Calculate ledPWM as a fraction (0 to 1). Here we assume ledPWM scales linearly.
+      ledPWM = luxRequired / luxMax
+      # Now update the LED panel on channel 5 with the computed PWM and pattern.
+      setLedPatternPWM()
+  else:
+    # Outside the light window or ambient lux is sufficient,
+    # set brightness to zero (turn off or dim the panel).
+    ledPWM = 0
+    setLedPatternPWM()
+def controlTemp():
+  global tempMeas, tempCtrlStatus, tempDsrMax, tempDsrMin, co2_0, CO2dsr, CO2meas, fanPwr, fan_0, heatPwr, relay_0, pahub_0, startTempCtrl
+  # Select channel 1 to read from the CO2 sensor.
+  pahub_0.select_channel(1)
+  tempMeas = co2_0.temperature
+  CO2meas  = co2_0.co2
+  pahub_0.release_channel(1)
+  
+  currentTime = time.localtime()
+  minute = currentTime[4]
+  
+  if tempMeas < tempDsrMin:
+    relay_0.value(1)
+    heatPwr = 1
+    fanPwr = 0
+    fan_0.value(0)
+    startTempCtrl = minute
+  elif tempMeas > tempDsrMax:
+    fan_0.value(1)
+    fanPwr = 1
+    heatPwr = 0
+    relay_0.value(0)
+    startTempCtrl = minute
+  else:
+    relay_0.value(0)
+    fan_0.value(0)
+    heatPwr = 0
+    fanPwr = 0
+  # ----- Timer-based off logic
+  if heatPwr == 1 and (minute - startTempCtrl > 5 or minute - startTempCtrl < 0):  # If heater has run too long
+    relay_0.value(0)                                                                 # Turn off heater relay
+    heatPwr   = 0                                                                    # Reset heater power flag
+    logSubsystemActivity("Temp", tempMeas, "Heater turned OFF")
+  if fanPwr == 1 and (minute - startTempCtrl > 15 or minute - startTempCtrl < 0):  # If fan has run too long
+    fan_0.value(0)                                                                   # Turn off fan relay
+    fanPwr    = 0                                                                    # Reset fan power flag
+    logSubsystemActivity("Temp", tempMeas, "Fan turned OFF")
+  # ----- CO2 fallback control 
+  if (CO2meas < CO2dsr or CO2meas > 1200) and fanPwr == 0:  # If CO2 reading is out of range and fan is off
+    fan_0.value(1)                                            # Activate fan relay as a fallback measure
+    startTempCtrl = minute                                    # Reset control start time
+    logSubsystemActivity("Temp", CO2meas, "CO2 fallback: Fan turned ON")
+    fanPwr = 1
+  if fanPwr == 1 and (minute - startTempCtrl > 5 or minute - startTempCtrl < 0):  # If the fan has been on for 5 minutes
+    fan_0.value(0)                                                                  # Turn off the fan
+    logSubsystemActivity("Temp", CO2meas, "CO2 fallback: Fan tunred OFF")
+  # ----- Update status string 
+  if fanPwr == 1:                                         # If fan is active
+    tempCtrlStatus = 'Fan On'
+  elif heatPwr == 1:                                      # If heater is active
+    tempCtrlStatus = 'Heater On'
+  else:                                                   # Otherwise
+    tempCtrlStatus = 'None'
+def controlMoisture():
+    """
+    Reads the moisture sensor data for each node from the appropriate PbHUB.
+    For node indices less than 5, uses pbhub_0 channels 0-4.
+    For node indices 5 and greater, uses pbhub_1 channels (node index - 5).
+    Then, if the measured moisture percentage is below the desired threshold,
+    the pump is activated for that node, and after the pump's defined run duration,
+    the pump is turned off.
+    """
+    global nodeMoistMeasPerc, nodeMoistMeas, nodeCount, \
+           pbhub_0, pbhub_1, nodeMoistSecOn, pumpActive, pumpStartTime, nodeMoistDsrPerc
+
+    # --- Read sensor values and compute moisture percentage ---
+    for i in range(nodeCount):
+        if i < 5:
+            # Read sensor value from pbhub_0 at channel i
+            nodeMoistMeas[i] = pbhub_0.analog_read(i)
+        else:
+            # Read sensor value from pbhub_1 at channel (i-5)
+            nodeMoistMeas[i] = pbhub_1.analog_read(i - 5)
+            
+        # Convert the ADC reading (0-4095) to a moisture percentage.
+        # The conversion here assumes that 4095 means 0% moisture.
+        nodeMoistMeasPerc[i] = round(100 - ((nodeMoistMeas[i] / 4095) * 100), 0)
+        logSubsystemActivity("Moisture", "Node {}".format(i), nodeMoistMeasPerc[i])
+
+    # --- Pump Control Based on Measured Moisture ---
+    for i in range(nodeCount):
+        # If the measured moisture is below the converted desired threshold
+        if nodeMoistMeasPerc[i] < nodeMoistDsrPerc[i]:
+            if not pumpActive[i]:
+                # Activate the pump on the appropriate PbHUB channel.
+                if i < 5:
+                    pbhub_0.digital_write(i, 0, 1)
+                else:
+                    pbhub_1.digital_write(i - 5, 0, 1)
+                pumpStartTime[i] = time.ticks_ms()  # Record the start time
+                pumpActive[i] = True
+                logSubsystemActivity("Moisture", "Node {}".format(i), "Pump turned ON")
+        # If pump is active check whether it has run long enough
+        if pumpActive[i]:
+            if time.ticks_diff(time.ticks_ms(), pumpStartTime[i]) >= nodeMoistSecOn[i]:
+                # Turn the pump off from the appropriate channel.
+                if i < 5:
+                    pbhub_0.digital_write(i, 0, 0)
+                else:
+                    pbhub_1.digital_write(i - 5, 0, 0)
+                pumpActive[i] = False
+                logSubsystemActivity("Moisture", "Node {}".format(i), "Pump turned OFF")
+# ----- The following functions handle modifying variables
+def setVariables():
+  # ----- Global declarations
+  global oldDataundefined, currentMinute, i, currentTime, phaseDsr, screenNumber, isPressed
+  global year, month, day, hour, minute
+  global nodeNum, nodeCount, nodeMoistDsr, nodeMoistMeas, nodeMoistMeasPerc, nodeMoistDsrPerc, nodeMoistSecOn, pumpStartTime, pumpActive
+  global tempMeas, tempCtrlStatus, tempDsrMin, tempDsrMax, CO2dsr, CO2meas, heatPwr, fanPwr, startTempCtrl
+  global luxMeas, luxRequired, luxDsr, luxMax, ledPWM, ppfdConstantSun, ppfdConstantLED, panels, LEDnumbersRed, LEDnumbersGreen, LEDnumbersBlue
+  global menuSetupComplete, lastMoistTime, lastHeatTime, lastLightTime, lastMainUpdate, lastResetDay, currentDay, count
+  # ----- Date/Time Variables
+  year, month, day, hour, minute = 2025, 1, 1, 0, 0
+  # ----- Moisture & Pump Control Variables
+  nodeCount = 5
+  nodeNum = 0
+  nodeMoistDsr = ['Med'] * nodeCount          # Desired moisture setting (as text)
+  nodeMoistMeas = [0] * nodeCount             # Raw sensor measurements
+  nodeMoistMeasPerc = [0] * nodeCount         # Calculated moisture percentage
+  nodeMoistDsrPerc = [0] * nodeCount          # Converted desired moisture (numeric threshold)
+  nodeMoistSecOn = [0] * nodeCount            # Pump on duration (ms) for each node
+  pumpActive = [False] * nodeCount            # Current pump state per node
+  pumpStartTime = [0] * nodeCount             # Timestamp when pump started per node
+  # ----- Temperature & CO2 Variables
+  tempMeas = 0
+  tempCtrlStatus = 'none'
+  tempDsrMin = 25
+  tempDsrMax = 35
+  CO2dsr = 400
+  CO2meas = 0
+  heatPwr = 0
+  fanPwr = 0
+  startTempCtrl = 0
+  relay_0.value(0)                                        # Ensure heater relay is off
+  fan_0.value(0)                                          # Ensure fan relay is off  
+  # ----- Light & LED Variables
+  luxMeas = 0
+  luxRequired = 0
+  luxDsr = 0
+  luxMax = 0
+  ledPWM = 0
+  luxFruit = 624
+  luxFruitMax = 971
+  luxGerm = 279
+  luxGermMax = 971
+  luxVege = 516
+  luxVegeMax = 981
+  ppfdConstantSun = 0.0185  
+  ppfdConstantLED = 0       # To be set in phase selection
+  panels = 0
+  LEDnumbersRed = 0
+  LEDnumbersGreen = 0
+  LEDnumbersBlue = 0
+  # ----- System & Miscellaneous Variables
+  screenNumber = 0
+  isPressed = 0
+  menuSetupComplete = False
+  oldDataundefined = 0
+  lastMoistTime = 0
+  lastHeatTime = 0
+  lastLightTime = 0
+  lastMainUpdate = 0
+  lastResetDay = 0
+  currentDay = 0
+  count = 0
+  phaseDsr = 'Germ'
+def convertMoisture():
+  """
+  This function converts the desired moisture setting from a word to
+  a number and a pump on duration (milliseconds)
+  for comparison in the moisture control routine.
+  """
+  global nodeCount, nodeMoistDsr, nodeMoistDsrPerc, nodeMoistSecOn
+
+  for i in range(min(nodeCount, 6)):           # Loop over each node (up to 6 or nodeCount)
+    if nodeMoistDsr[i] == 'Low':               # If desired setting is Low
+      nodeMoistDsrPerc[i] = 55                  # Set numeric threshold to 55%
+      nodeMoistSecOn[i]   = 3688                 # Set pump on duration to 3688 ms
+    elif nodeMoistDsr[i] == 'Med':             # If desired setting is Medium
+      nodeMoistDsrPerc[i] = 65                   # Set numeric threshold to 65%
+      nodeMoistSecOn[i]   = 5529                 # Set pump on duration to 5529 ms
+    elif nodeMoistDsr[i] == 'High':             # If desired setting is High
+      nodeMoistDsrPerc[i] = 80                   # Set numeric threshold to 80%
+      nodeMoistSecOn[i]   = 7380                 # Set pump on duration to 7380 ms
+def updateNodeLists():
+  """
+  This function updates the moisture control lists to reflect the current nodeCount.
+  If nodeCount has increased, the lists are extended with default values.
+  If nodeCount has decreased, the lists are truncated accordingly.
+  """
+  global nodeCount, nodeMoistDsr, nodeMoistMeas, nodeMoistMeasPerc, nodeMoistDsrPerc, pumpStartTime, nodeMoistSecOn, pumpActive
+  current_length = len(nodeMoistDsr)                  # Get current number of nodes in the desired moisture list
+  if nodeCount > current_length:                      # If nodeCount has increased, extend the lists
+    diff = nodeCount - current_length                   # Calculate the difference in count
+    nodeMoistDsr.extend(['Med'] * diff)                 # Extend desired moisture settings with default 'Med'
+    nodeMoistMeas.extend([0] * diff)                    # Extend raw measurement list with zeros
+    nodeMoistMeasPerc.extend([0] * diff)                # Extend moisture percentage list with zeros
+    nodeMoistDsrPerc.extend([0] * diff)                 # Extend threshold list with zeros
+    pumpStartTime.extend([0] * diff)                    # Extend pump start times with zeros
+    nodeMoistSecOn.extend([0] * diff)                   # Extend pump duration list with zeros
+    pumpActive.extend([0] * diff)
+  elif nodeCount < current_length:                    # If nodeCount has decreased, truncate the lists
+    nodeMoistDsr       = nodeMoistDsr[:nodeCount]       # Truncate desired moisture list to nodeCount
+    nodeMoistMeas      = nodeMoistMeas[:nodeCount]      # Truncate raw measurements list to nodeCount
+    nodeMoistMeasPerc  = nodeMoistMeasPerc[:nodeCount]  # Truncate moisture percentage list to nodeCount
+    nodeMoistDsrPerc   = nodeMoistDsrPerc[:nodeCount]   # Truncate threshold list to nodeCount
+    pumpStartTime      = pumpStartTime[:nodeCount]      # Truncate pump start times list to nodeCount
+    nodeMoistSecOn     = nodeMoistSecOn[:nodeCount]     # Truncate pump duration list to nodeCount
+    pumpActive         = pumpActive[:nodeCount]
+def dec2bcd(n):
+  # Convert a decimal number to Binary Coded Decimal (BCD)
+  return ((n // 10) << 4) | (n % 10)
+# ----- The following funcitons are for system functionality
+def storeTimeToRTC():
+  """
+  Stores the user-set date and time into the built-in BM8563 RTC.
+  Uses the globals: year, month, day, hour, minute, and the I2C instance (i2c0).
+  The BM8563 expects time data (in BCD format) starting at register 0x02:
+    Register 0x02: Seconds
+    Register 0x03: Minutes
+    Register 0x04: Hours
+    Register 0x05: Day
+    Register 0x06: Weekday (set to 0 if not used)
+    Register 0x07: Month
+    Register 0x08: Year (two-digit; offset from 2000)
+  """
+  global year, month, day, hour, minute, i2c0
+  rtc_year  = year - 2000         # Convert full year to 2-digit year for RTC (e.g. 2025 -> 25)
+  sec       = 0                   # Default seconds = 0
+  bsec      = dec2bcd(sec)        # Convert seconds to BCD
+  bmin      = dec2bcd(minute)     # Convert minutes to BCD
+  bhour     = dec2bcd(hour)       # Convert hours to BCD
+  bday      = dec2bcd(day)        # Convert day of month to BCD
+  bmonth    = dec2bcd(month)      # Convert month to BCD
+  byear     = dec2bcd(rtc_year)   # Convert year offset to BCD
+  bweekday  = 0                   # Set weekday to 0 (change if you wish to use this field)
+  # Create a byte array to transmit, starting at register 0x02.
+  data = bytearray([ bsec, bmin, bhour, bday, bweekday, bmonth, byear ])
+  # Write the data to the BM8563 RTC via I2C.
+  # The BM8563 I2C address is typically 0x51. Register 0x02 is the starting address.
+  i2c1.writeto_mem(RTC_ADDRESS, 0x02, data)
+
+def setup():
+  """
+  SETUP:
+  - Initialize the M5 device.
+  - Create and initialize UI widgets.
+  - Initialize network (WiFi, ESPNow) and sensor connections.
+  - Call setVariables() to initialize state.
+  - Set the initial screen and speaker volume.
+  """
+  # ----- Global declarations (for UI and connections)
+  global title0, leftOne, leftTwo, leftThree, leftFour, leftFive, leftSix
+  global middleTop, middleMiddle, leftBottom, middleBottom, rightBottom, rightTop, rightMiddle
+  global view, screenNumber, oldDataundefined, isPressed, count, e
+  global i2c0, i2c1, dlight_0, pahub_0, pbhub_0, pbhub_1, co2_0, fan_0, relay_0, RTC_ADDRESS
+  # ----- Initialize M5 and UI Widgets
+  M5.begin()
+  # ----- Create labels and title elements
+  title0 = Widgets.Title("", 5, 0xffffff, 0x6c6cd3, Widgets.FONTS.DejaVu24)
+  leftOne = Widgets.Label("", 0, 30, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+  leftTwo = Widgets.Label("", 0, 60, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+  leftThree = Widgets.Label("", 0, 90, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+  leftFour = Widgets.Label("", 0, 120, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+  leftFive = Widgets.Label("", 0, 150, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+  leftSix = Widgets.Label("", 50, 180, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu18)
+  middleTop = Widgets.Label("", 131, 60, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu24)
+  middleMiddle = Widgets.Label("", 133, 108, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu24)
+  leftBottom = Widgets.Label("", 0, 210, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu24)
+  middleBottom = Widgets.Label("", 125, 210, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu24)
+  rightBottom = Widgets.Label("", 242, 210, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu24)
+  rightTop = Widgets.Label("", 252, 30, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu24)
+  rightMiddle = Widgets.Label("", 260, 105, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu24)    # ----- Initialize M5 device and UI Widgets as before
+  M5.begin()
+  # ----- Initialize PaHUB on Port A instead of i2c0
+  i2c0 = I2C(0, scl=Pin(1), sda=Pin(2), freq=100000)  # Establish I2C connection for sensor modules
+  pahub_0 = unit.get(unit.PAHUB, unit.PORTA)
+  pahub_0.start()
+  # ----- Initialize Sensors via PaHUB channels:
+  # Channel 0: DLight
+  pahub_0.select_channel(0)
+  dlight_0 = DLightUnit(i2c=pahub_0, address=0x23)  # Address may be set as needed
+  pahub_0.release_channel(0)
+  # Channel 1: CO2 sensor (e.g., address 0x62)
+  pahub_0.select_channel(1)
+  co2_0 = CO2Unit(i2c=pahub_0, address=0x62)
+  pahub_0.release_channel(1)
+  # Channel 2: First PbHUB
+  pahub_0.select_channel(2)
+  pbhub_0 = PBHUBUnit(i2c=pahub_0, address=0x61)
+  pahub_0.release_channel(2)
+  # Channel 3: Second PbHUB
+  pahub_0.select_channel(3)
+  pbhub_1 = PBHUBUnit(i2c=pahub_0, address=0x61)
+  pahub_0.release_channel(3)
+  # ----- For the RTC, keep using i2c1 on dedicated pins as before.
+  i2c1 = I2C(1, scl=Pin(11), sda=Pin(12), freq=100000)
+  RTC_ADDRESS = 0x51
+  # ----- Initialize the internal RTC on a separate I2C bus 1, using the system RTC pins: GP11 for SCL and GP12 for SDA.
+  i2c1 = I2C(1, scl=Pin(11), sda=Pin(12), freq=100000)
+  RTC_ADDRESS = 0x51                                  # BM8563 7-bit I2C address (Write: 0xA2, Read: 0xA3)
+  devices = i2c0.scan()                               # Scans ports for any I2C devices connected
+  print("I2C devices found:", devices)                # Prints to the terminal all I@C devices found
+  # ----- Initialize Global Variables & UI State
+  setVariables()                                      # Initialize all state variables (date/time, moisture, temperature, light, etc.)
+  SetScreen()                                         # Draw the initial screen based on screenNumber
+  Speaker.setVolumePercentage(0.1)
+  # ----- Initializes the view to the main screen
+  view = 0
+  # ----- Sleeps for 5 seconds to let the sensors initialize
+  time.sleep(5) 
+
+def loop():
+  """
+  MAIN LOOP:
+    - Updates the device (touch input, sensor reading, etc.).
+    - Debounces and captures touch events.
+    - Calls menu and control functions.
+    - Periodically refreshes the main display.
+  """
+  global touchX, touchY, isPressed, count, oldDataundefined # NOTE: Other globals are used within the individual button and control functions.
+  global screenNumber, lastMainUpdate, menuSetupComplete, phaseDsr
+  # ----- Update Touch and System State
+  M5.update()
+  # ----- Debounce and Capture Touch Event
+  count = M5.Touch.getCount()
+  if count != oldDataundefined:
+    oldDataundefined = count
+    if count:                                       # Finger down: record touch coordinates
+      isPressed = 1
+      touchX = M5.Touch.getX()
+      touchY = M5.Touch.getY()
+    else:                                           # Finger released: reset the flag
+      isPressed = 0
+  # ----- Process Menu/Button Functions
+  menuButton()                                      # Process main menu button actions
+  yearButton()                                      # Process year button actions
+  monthButton()                                     # Process month button actions
+  dayButton()                                       # Process day button actions
+  hourButton()                                      # Process hour button actions
+  minuteButton()                                    # Process minute button actions
+  nodeButton()                                      # Process node count button actions
+  moistDsrButton()                                  # Process node moisture desired button actions
+  phaseDsrButton()                                  # Process phase desired button actions
+  # ----- Run Scheduled Control Functions (if setup is complete)
+  convertMoisture()                                 # Update moisture conversion and sensor values
+  if menuSetupComplete:
+    controlSchedule()                                 # Execute scheduled control tasks
+  # ----- Periodically refresh the Main Screen (if active)
+  if screenNumber == 0 and time.ticks_diff(time.ticks_ms(), lastMainUpdate) > 5000:
+    mainImage()                                     # Refresh main screen
+    lastMainUpdate = time.ticks_ms()                # Update the last refresh time
+
+
+
