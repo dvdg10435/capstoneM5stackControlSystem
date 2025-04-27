@@ -1,14 +1,9 @@
-#This code includes a PaHUb for testing
-import os
-import sys
-import io
-import time, ujson
-from machine import I2C, Pin
-import M5
+import os, sys, io
+import M5, machine
 from M5 import *
-from unit import PAHUBUnit, CO2Unit, DLightUnit, WateringUnit, RelayUnit, FanUnit, PBHUBUnit
-import ds3231
-from hardware import I2C
+from unit import DLightUnit, CO2Unit, PBHUBUnit, RGBUnit, PAHUBUnit, PBHUBUnit
+from hardware import I2C, Pin
+import time, ntptime
 
 """Global Variables: (Used to confirm that all variables are declared in functions correctly)
     - Date/Time: year, month, day, hour, minute
@@ -724,7 +719,7 @@ def setVariables():
   luxVegeMax = 981
   ppfdConstantSun = 0.0185  
   ppfdConstantLED = 0       # To be set in phase selection
-  panels = 0
+  panels = 6
   LEDnumbersRed = 0
   LEDnumbersGreen = 0
   LEDnumbersBlue = 0
@@ -847,8 +842,7 @@ def setup():
   middleBottom = Widgets.Label("", 125, 210, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu24)
   rightBottom = Widgets.Label("", 242, 210, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu24)
   rightTop = Widgets.Label("", 252, 30, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu24)
-  rightMiddle = Widgets.Label("", 260, 105, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu24)    # ----- Initialize M5 device and UI Widgets as before
-  M5.begin()
+  rightMiddle = Widgets.Label("", 260, 105, 1.0, 0xffffff, 0x222222, Widgets.FONTS.DejaVu24)    
   # ----- Initialize PaHUB on Port A instead of i2c0
   i2c0 = I2C(0, scl=Pin(1), sda=Pin(2), freq=100000)  # Establish I2C connection for sensor modules
   pahub_0 = unit.get(unit.PAHUB, unit.PORTA)
@@ -880,10 +874,10 @@ def setup():
   print("I2C devices found:", devices)                # Prints to the terminal all I@C devices found
   # ----- Initialize Global Variables & UI State
   setVariables()                                      # Initialize all state variables (date/time, moisture, temperature, light, etc.)
-  SetScreen()                                         # Draw the initial screen based on screenNumber
   Speaker.setVolumePercentage(0.1)
   # ----- Initializes the view to the main screen
   view = 0
+  SetScreen()                                         # Draw the initial screen based on screenNumber
   # ----- Sleeps for 5 seconds to let the sensors initialize
   time.sleep(5) 
 
