@@ -1,0 +1,90 @@
+import network, espnow, ujson, esp32
+import time
+from machine import Pin
+
+# ----- Set up the number of LEDs to control
+LED_PIN    = 32               # Pin where SK6812 data line is wired
+NUM_LEDS   = 6 * 37           # total LEDs in chain
+PEER_MAC   = b'\x30\xAE\xA4\x12\x34\x56'  # your CoreS3’s MAC
+# ----- RMT-based SK6812 driver
+class SK6812:
+  T0H = 400   # ns
+  T0L = 850
+  T1H = 800
+  T1L = 450
+
+  def __init__(self, pin, n):
+    self.n = n
+    self.rmt = esp32.RMT(0, pin=Pin(pin, Pin.OUT), clock_div=8)
+    self._buf = bytearray(n * 3)
+
+  def _encode_byte(self, b):
+    pulses = []
+    for i in range(8):
+      if b & (1 << (7 - i)):
+        pulses.append((1, self.T1H))
+        pulses.append((0, self.T1L))
+      else:
+        pulses.append((1, self.T0H))
+        pulses.append((0, self.T0L))
+    return pulses
+
+  def write(self, data, brightness=1.0):
+    # data: list of (r,g,b) tuples, len <= self.n
+    # brightness: float 0.0–1.0
+    # build the raw pulse list
+    pulses = []
+    for i, (r, g, b) in enumerate(data):
+      # apply brightness
+      r = int(r * brightness)
+      g = int(g * brightness)
+      b = int(b * brightness)
+      # SK6812 uses GRB ordering
+      pulses += self._encode_byte(g)
+      pulses += self._encode_byte(r)
+      pulses += self._encode_byte(b)
+    # pad for any missing LEDs
+    for _ in range(self.n - len(data)):
+      pulses += self._encode_byte(0)
+      pulses += self._encode_byte(0)
+      pulses += self._encode_byte(0)
+    # send
+    self.rmt.write_pulses(pulses, start=1)
+    # reset latch: >50 µs low
+# ----- Initialize strip & ESP-Now
+strip = SK6812(LED_PIN, NUM_LEDS)
+
+w0 = network.WLAN(network.STA_IF)
+w0.active(True)
+
+e = espnow.ESPNow()
+e.init()
+e.add_peer(PEER_MAC)
+
+e.send(PEER_MAC, ujson.dumps({"ready": True}))
+
+# ---- Main loop — receive JSON from CoreS3, light up strip
+while True:
+  host, msg = e.recv()  # blocks until packet
+  try:
+    pkt = ujson.loads(msg)
+    red_idxs   = set(pkt.get("r", []))
+    green_idxs = set(pkt.get("g", []))
+    blue_idxs  = set(pkt.get("b", []))
+    bri        = pkt.get("brightness", 0.0)
+
+    # build per-LED (r,g,b) list
+    frame = []
+    for led_no in range(1, NUM_LEDS + 1):
+      r = 255 if led_no in red_idxs else 0
+      g = 255 if led_no in green_idxs else 0
+      b = 255 if led_no in blue_idxs else 0
+      frame.append((r, g, b))
+
+    strip.write(frame, bri)
+
+  except Exception as err:
+    print("RX error:", err)
+    # continue listening
+    continue
+  time.sleep_ms(5)
